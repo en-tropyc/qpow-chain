@@ -17,13 +17,16 @@
 
 use futures::FutureExt;
 use minimal_template_runtime::{interface::OpaqueBlock as Block, RuntimeApi};
+use super::consensus::RoundRobinConsensus;
 use polkadot_sdk::{
-	sc_client_api::backend::Backend,
 	sc_executor::WasmExecutor,
 	sc_service::{error::Error as ServiceError, Configuration, TaskManager},
 	sc_telemetry::{Telemetry, TelemetryWorker},
 	sc_transaction_pool_api::OffchainTransactionPoolFactory,
 	sp_runtime::traits::Block as BlockT,
+	sp_consensus::Error as ConsensusError,
+	sc_consensus::BlockImport,
+	polkadot_service::Backend,
 	*,
 };
 use std::sync::Arc;
@@ -257,6 +260,23 @@ pub fn new_full<Network: sc_network::NetworkBackend<Block, <Block as BlockT>::Ha
 				"manual-seal",
 				None,
 				authorship_future,
+			);
+		},
+		Consensus::RoundRobin { validator_id, total_validators } => {
+			let round_robin = RoundRobinConsensus::new(
+				client.clone(),
+				Box::new(client.clone()) as Box<dyn BlockImport<Block, Error = ConsensusError> + Send>,
+				validator_id,
+				total_validators,
+			);
+
+			task_manager.spawn_essential_handle().spawn_blocking(
+				"round-robin",
+				None,
+				async move {
+					let mut round_robin = round_robin;
+					round_robin.run().await
+				},
 			);
 		},
 	}

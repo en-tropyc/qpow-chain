@@ -22,6 +22,8 @@ jsonrpsee = { features = ["server"], workspace = true }
 serde_json = { workspace = true, default-features = true }
 polkadot-sdk = { workspace = true, features = ["experimental", "node"] }
 minimal-template-runtime.workspace = true
+log = "0.4"
+tokio = { version = "1.0", features = ["rt-multi-thread", "time"] }
 
 [build-dependencies]
 polkadot-sdk = { workspace = true, features = ["substrate-build-script-utils"] }

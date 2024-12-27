@@ -23,6 +23,7 @@ mod cli;
 mod command;
 mod rpc;
 mod service;
+mod consensus;
 
 fn main() -> polkadot_sdk::sc_cli::Result<()> {
 	command::run()

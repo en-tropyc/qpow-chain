@@ -21,6 +21,10 @@ use polkadot_sdk::{sc_cli::RunCmd, *};
 pub enum Consensus {
 	ManualSeal(u64),
 	InstantSeal,
+	RoundRobin {
+		validator_id: u32,
+		total_validators: u32,
+	},
 }
 
 impl std::str::FromStr for Consensus {
@@ -31,6 +35,15 @@ impl std::str::FromStr for Consensus {
 			Consensus::InstantSeal
 		} else if let Some(block_time) = s.strip_prefix("manual-seal-") {
 			Consensus::ManualSeal(block_time.parse().map_err(|_| "invalid block time")?)
+		} else if let Some(params) = s.strip_prefix("round-robin-") {
+			let parts: Vec<&str> = params.split('-').collect();
+			if parts.len() != 2 {
+				return Err("round-robin requires validator-id and total-validators".into());
+			}
+			Consensus::RoundRobin {
+				validator_id: parts[0].parse().map_err(|_| "invalid validator id")?,
+				total_validators: parts[1].parse().map_err(|_| "invalid total validators")?,
+			}
 		} else {
 			return Err("incorrect consensus identifier".into());
 		})
