@@ -41,6 +41,7 @@ polkadot-sdk = { workspace = true, features = [
 	"sc-offchain",
 	"sc-consensus-manual-seal",
 	"substrate-frame-rpc-system",
+	"sc-client-db"
 ] }
 minimal-template-runtime.workspace = true
 log = "0.4"

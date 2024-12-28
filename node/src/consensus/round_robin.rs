@@ -1,15 +1,17 @@
 use super::basic_block_producer::BasicBlockProducer;
 use super::block_production::BlockProducer;
-use log::{debug, info, warn};
+use log::{debug, info, warn, trace};
 use polkadot_sdk::{
     sc_client_api::{Backend, BlockBackend, BlockchainEvents, HeaderBackend},
     sc_consensus::{BlockImport, BlockImportParams, ForkChoiceStrategy},
-    sp_api::ProvideRuntimeApi,
+    sp_api::{Core, ProvideRuntimeApi},
     sp_consensus::{BlockOrigin, Error as ConsensusError},
     sp_runtime::{
         traits::{Block as BlockT, One},
+        Saturating,
         SaturatedConversion,
     },
+    sp_block_builder::BlockBuilder,
 };
 use std::{sync::Arc, time::Duration};
 
@@ -24,11 +26,14 @@ pub struct RoundRobinConsensus<Block: BlockT, Client, BE> {
 impl<Block, Client, BE> RoundRobinConsensus<Block, Client, BE>
 where
     Block: BlockT,
-    BE: Backend<Block>,
+    BE: Backend<Block> + Send + Sync,
     Client: BlockBackend<Block> 
         + BlockchainEvents<Block> 
         + HeaderBackend<Block> 
-        + ProvideRuntimeApi<Block>,
+        + ProvideRuntimeApi<Block> 
+        + Send 
+        + Sync,
+    Client::Api: BlockBuilder<Block> + Core<Block>,
 {
     pub fn new(
         client: Arc<Client>,
@@ -98,6 +103,53 @@ where
             self.validator_id,
             (best_number + One::one()).saturated_into::<u32>()
         );
+
+        Ok(())
+    }
+
+    async fn produce_block(&mut self) -> Result<(), ConsensusError> {
+        let best_header = self.client.info().best_hash;
+        let best_number = self.client.info().best_number;
+
+        // Check if it's our turn
+        let slot = (best_number.saturating_add(One::one())) % self.total_validators.into();
+        if slot == self.validator_id.into() {
+            info!(
+                "🎲 Validator {} producing block #{} (slot {})", 
+                self.validator_id,
+                best_number.saturating_add(One::one()),
+                slot
+            );
+
+            let block = self.block_producer
+                .produce_block(best_header, best_number)
+                .await?;
+
+            info!(
+                "✅ Validator {} produced block #{} ({})", 
+                self.validator_id,
+                best_number.saturating_add(One::one()),
+                block.hash()
+            );
+
+            // Import the block
+            let (header, body) = block.deconstruct();
+            let mut import_params = BlockImportParams::new(BlockOrigin::Own, header);
+            import_params.body = Some(body);
+            import_params.fork_choice = Some(ForkChoiceStrategy::LongestChain);
+
+            self.block_import
+                .import_block(import_params)
+                .await
+                .map_err(|e| ConsensusError::Other(Box::new(e)))?;
+        } else {
+            trace!(
+                "⏳ Validator {} waiting (current slot {} belongs to validator {})", 
+                self.validator_id,
+                slot,
+                slot
+            );
+        }
 
         Ok(())
     }

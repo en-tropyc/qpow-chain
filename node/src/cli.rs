@@ -60,6 +60,14 @@ pub struct Cli {
 
 	#[clap(flatten)]
 	pub run: RunCmd,
+
+	/// Validator ID for round-robin consensus
+	#[arg(long)]
+	pub validator_id: Option<u32>,
+
+	/// Total number of validators in the network
+	#[arg(long)]
+	pub total_validators: Option<u32>,
 }
 
 #[derive(Debug, clap::Subcommand)]

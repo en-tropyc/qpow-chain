@@ -119,11 +119,11 @@ pub fn run() -> sc_cli::Result<()> {
 			runner.run_node_until_exit(|config| async move {
 				match config.network.network_backend {
 					sc_network::config::NetworkBackendType::Libp2p =>
-						service::new_full::<sc_network::NetworkWorker<_, _>>(config, cli.consensus)
+						service::new_full::<sc_network::NetworkWorker<_, _>>(config, &cli)
 							.map_err(sc_cli::Error::Service),
 					sc_network::config::NetworkBackendType::Litep2p => service::new_full::<
 						sc_network::Litep2pNetworkBackend,
-					>(config, cli.consensus)
+					>(config, &cli)
 					.map_err(sc_cli::Error::Service),
 				}
 			})

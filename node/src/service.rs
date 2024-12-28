@@ -28,11 +28,14 @@ use polkadot_sdk::{
 	sc_consensus::BlockImport,
 	sc_client_api::Backend,
 	sc_service::TFullBackend,
+	sc_client_db::Backend as DatabaseBackend,
 	*,
 };
 use std::sync::Arc;
 
 use crate::cli::Consensus;
+use crate::cli::Cli;
+use log::info;
 
 type HostFunctions = sp_io::SubstrateHostFunctions;
 
@@ -111,7 +114,7 @@ pub fn new_partial(config: &Configuration) -> Result<Service, ServiceError> {
 /// Builds a new service for a full client.
 pub fn new_full<Network: sc_network::NetworkBackend<Block, <Block as BlockT>::Hash>>(
 	config: Configuration,
-	consensus: Consensus,
+	cli: &Cli,
 ) -> Result<TaskManager, ServiceError> {
 	let sc_service::PartialComponents {
 		client,
@@ -207,7 +210,37 @@ pub fn new_full<Network: sc_network::NetworkBackend<Block, <Block as BlockT>::Ha
 		telemetry.as_ref().map(|x| x.handle()),
 	);
 
-	match consensus {
+	let _consensus_result = match (cli.validator_id, cli.total_validators) {
+		(Some(validator_id), Some(total_validators)) => {
+			let round_robin: RoundRobinConsensus<Block, _, DatabaseBackend<Block>> = RoundRobinConsensus::new(
+				client.clone(),
+				Box::new(client.clone()) as Box<dyn BlockImport<Block, Error = ConsensusError> + Send>,
+				validator_id,
+				total_validators,
+			);
+
+			task_manager.spawn_essential_handle().spawn_blocking(
+				"round-robin-consensus",
+				None,
+				async move {
+					let mut round_robin = round_robin;
+					round_robin.run().await
+				},
+			);
+			Ok(())
+		}
+		(None, None) => {
+			info!("Node running in non-validator mode");
+			Ok(())
+		}
+		_ => {
+			Err(ServiceError::Other(
+				"Both --validator-id and --total-validators must be specified for validator mode".into(),
+			))
+		}
+	}?;
+
+	match cli.consensus {
 		Consensus::InstantSeal => {
 			let params = sc_consensus_manual_seal::InstantSealParams {
 				block_import: client.clone(),
@@ -264,22 +297,8 @@ pub fn new_full<Network: sc_network::NetworkBackend<Block, <Block as BlockT>::Ha
 				authorship_future,
 			);
 		},
-		Consensus::RoundRobin { validator_id, total_validators } => {
-			let round_robin: RoundRobinConsensus<Block, _, TFullBackend<Block>> = RoundRobinConsensus::new(
-				client.clone(),
-				Box::new(client.clone()) as Box<dyn BlockImport<Block, Error = ConsensusError> + Send>,
-				validator_id,
-				total_validators,
-			);
-
-			task_manager.spawn_essential_handle().spawn_blocking(
-				"round-robin",
-				None,
-				async move {
-					let mut round_robin = round_robin;
-					round_robin.run().await
-				},
-			);
+		Consensus::RoundRobin { .. } => {
+			// Round robin is handled by the earlier match statement
 		},
 	}
 
