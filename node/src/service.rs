@@ -26,7 +26,8 @@ use polkadot_sdk::{
 	sp_runtime::traits::Block as BlockT,
 	sp_consensus::Error as ConsensusError,
 	sc_consensus::BlockImport,
-	polkadot_service::Backend,
+	sc_client_api::Backend,
+	sc_service::TFullBackend,
 	*,
 };
 use std::sync::Arc;
@@ -157,11 +158,12 @@ pub fn new_full<Network: sc_network::NetworkBackend<Block, <Block as BlockT>::Ha
 				runtime_api_provider: client.clone(),
 				is_validator: config.role.is_authority(),
 				keystore: Some(keystore_container.keystore()),
-				offchain_db: backend.offchain_storage(),
+				offchain_db: Some(backend.offchain_storage()
+					.expect("Offchain storage should be available")),
 				transaction_pool: Some(OffchainTransactionPoolFactory::new(
 					transaction_pool.clone(),
 				)),
-				network_provider: Arc::new(network.clone()),
+					network_provider: Arc::new(network.clone()),
 				enable_http_requests: true,
 				custom_extensions: |_| vec![],
 			})
@@ -263,7 +265,7 @@ pub fn new_full<Network: sc_network::NetworkBackend<Block, <Block as BlockT>::Ha
 			);
 		},
 		Consensus::RoundRobin { validator_id, total_validators } => {
-			let round_robin = RoundRobinConsensus::new(
+			let round_robin: RoundRobinConsensus<Block, _, TFullBackend<Block>> = RoundRobinConsensus::new(
 				client.clone(),
 				Box::new(client.clone()) as Box<dyn BlockImport<Block, Error = ConsensusError> + Send>,
 				validator_id,

@@ -20,10 +20,32 @@ futures = { features = ["thread-pool"], workspace = true }
 futures-timer = { workspace = true }
 jsonrpsee = { features = ["server"], workspace = true }
 serde_json = { workspace = true, default-features = true }
-polkadot-sdk = { workspace = true, features = ["experimental", "node"] }
+polkadot-sdk = { workspace = true, features = [
+	"sp-core",
+	"sp-runtime",
+	"sp-api",
+	"sp-consensus",
+	"sp-blockchain",
+	"sp-inherents",
+	"sp-timestamp",
+	"sc-executor",
+	"sc-client-api",
+	"sc-consensus",
+	"sc-service",
+	"sc-telemetry",
+	"sc-transaction-pool",
+	"sc-transaction-pool-api",
+	"sc-network",
+	"sc-basic-authorship",
+	"sc-cli",
+	"sc-offchain",
+	"sc-consensus-manual-seal",
+	"substrate-frame-rpc-system",
+] }
 minimal-template-runtime.workspace = true
 log = "0.4"
 tokio = { version = "1.0", features = ["rt-multi-thread", "time"] }
+async-trait = "0.1.77"
 
 [build-dependencies]
 polkadot-sdk = { workspace = true, features = ["substrate-build-script-utils"] }
@@ -34,3 +56,6 @@ std = [
 	"minimal-template-runtime/std",
 	"polkadot-sdk/std",
 ]
+
+[dev-dependencies]
+tokio = { version = "1.0", features = ["rt", "macros"] }
