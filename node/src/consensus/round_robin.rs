@@ -52,14 +52,14 @@ where
     }
 
     pub async fn run(&mut self) {
-        let mut interval = tokio::time::interval(Duration::from_secs(6));
+        info!("🚀 Starting round-robin consensus for validator {}", self.validator_id);
+        println!("🚀 Starting round-robin consensus for validator {}", self.validator_id);
         
         loop {
-            interval.tick().await;
-            
-            if let Err(e) = self.try_build_block().await {
-                warn!(target: "round-robin", "Failed to build block: {:?}", e);
+            if let Err(e) = self.produce_block().await {
+                warn!("Failed to produce block: {:?}", e);
             }
+            tokio::time::sleep(Duration::from_secs(1)).await;
         }
     }
 
@@ -112,23 +112,32 @@ where
         let best_number = self.client.info().best_number;
 
         // Check if it's our turn
-        let slot = (best_number.saturating_add(One::one())) % self.total_validators.into();
-        if slot == self.validator_id.into() {
-            info!(
-                "🎲 Validator {} producing block #{} (slot {})", 
-                self.validator_id,
-                best_number.saturating_add(One::one()),
-                slot
-            );
+        let slot = best_number.saturating_add(1u32.into()) % self.total_validators.into();
+        
+        let msg = format!("🔄 Round-Robin: Block #{} | Slot {} | Our ID {} | Total Validators {}", 
+            best_number + 1u32.into(),
+            slot,
+            self.validator_id,
+            self.total_validators
+        );
+        println!("{}", msg);
+        info!("{}", msg);
 
+        if slot == self.validator_id.into() {
+            let msg = format!("🎯 Our turn! Validator {} producing block #{}", 
+                self.validator_id,
+                best_number + 1u32.into()
+            );
+            println!("{}", msg);
+            info!("{}", msg);
+            
             let block = self.block_producer
                 .produce_block(best_header, best_number)
                 .await?;
 
-            info!(
-                "✅ Validator {} produced block #{} ({})", 
+            println!("✅ SUCCESS: Validator {} produced block #{} ({})", 
                 self.validator_id,
-                best_number.saturating_add(One::one()),
+                best_number + 1u32.into(),
                 block.hash()
             );
 
@@ -138,13 +147,12 @@ where
             import_params.body = Some(body);
             import_params.fork_choice = Some(ForkChoiceStrategy::LongestChain);
 
-            self.block_import
-                .import_block(import_params)
-                .await
-                .map_err(|e| ConsensusError::Other(Box::new(e)))?;
+            match self.block_import.import_block(import_params).await {
+                Ok(_) => println!("📥 Block #{} successfully imported", best_number + 1u32.into()),
+                Err(e) => println!("❌ Failed to import block #{}: {:?}", best_number + 1u32.into(), e),
+            }
         } else {
-            trace!(
-                "⏳ Validator {} waiting (current slot {} belongs to validator {})", 
+            println!("⏳ Not our turn. Validator {} waiting (slot {} belongs to validator {})", 
                 self.validator_id,
                 slot,
                 slot
